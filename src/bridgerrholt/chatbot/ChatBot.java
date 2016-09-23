@@ -3,14 +3,18 @@ package bridgerrholt.chatbot;
 import bridgerrholt.sqlite_interface.*;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.*;
 
+import java.sql.*;
 
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Random;
-import java.sql.*;
 
 
 public class ChatBot
@@ -94,16 +98,35 @@ public class ChatBot
 		assert(database != null);
 
 		try (Statement statement = database.createStatement()) {
-			Gson doc = new Gson();
-			doc.fromJson(new FileReader("resources/table_layouts.json"));
+			Gson gson = new Gson();
+			JsonReader reader = new JsonReader(new FileReader("resources/table_layouts.json"));
+			JsonElement json = gson.fromJson(reader, JsonElement.class);
+			JsonObject root = json.getAsJsonObject();
+			JsonArray current;
+			String toExecute = null;
+
 			for (String i : tableNames) {
+				current = root.get(i).getAsJsonArray();
+
 				ResultSet result = statement.executeQuery(
 					"SELECT name FROM sqlite_master WHERE type='table' AND name='" + i + "';"
 				);
 
 				if (!result.next()) {
-
+					toExecute = "CREATE TABLE " + i + "(";
+					for (int j = 0; j < current.size(); ++j) {
+						toExecute += current.get(j).getAsString();
+						if (j != current.size() - 1)
+							toExecute += ",";
+					}
+					toExecute += ");";
 				}
+
+				assert (toExecute != null && !toExecute.isEmpty());
+
+				System.out.println(toExecute);
+
+				statement.execute(toExecute);
 			}
 		}
 	}
