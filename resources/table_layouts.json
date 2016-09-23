@@ -1,0 +1,19 @@
+{
+  "statement_tree": [
+    "text_id      INT NOT NULL",
+    "list_id      INT NOT NULL",
+    "next_list_id INT DEFAULT 0",
+    "type         INT NOT NULL",
+    "has_question INT NOT NULL",
+    "count        INT DEFAULT 1"
+  ],
+
+  "statement_text": [
+    "text_simplified_id INT  NOT NULL",
+    "text               TEXT NOT NULL"
+  ],
+
+  "statement_text_simplified": [
+    "text TEXT NOT NULL"
+  ]
+}

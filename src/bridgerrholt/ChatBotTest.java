@@ -1,11 +1,11 @@
 package bridgerrholt;
 
-import bridgerrholt.chat_bot.ChatBot;
+import bridgerrholt.chatbot.ChatBot;
 
 public class ChatBotTest {
 	public static void main(String[] args) {
 		try {
-			ChatBot bot = new ChatBot();
+			ChatBot.createAndRun("databases/primary.db");
 		}
 
 		catch (Exception e) {
