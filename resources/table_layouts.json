@@ -2,20 +2,20 @@
   "statement_tree": [
     "list_id      INT NOT NULL",
     "next_list_id INT DEFAULT 0",
-    "data_id      INT NOT NULL",
-    "count        INT DEFAULT 1"
-  ],
-
-  "statement_data": [
     "text_id      INT NOT NULL",
-    "type         INT NOT NULL",
-    "has_question INT NOT NULL",
     "count        INT DEFAULT 1"
   ],
 
   "statement_text": [
-    "text_simplified_id INT  NOT NULL",
-    "text               TEXT NOT NULL"
+    "data_id INT NOT NULL",
+    "text    TEXT NOT NULL"
+  ],
+
+  "statement_data": [
+    "text_simplified_id INT NOT NULL",
+    "type               INT NOT NULL",
+    "has_question       INT NOT NULL",
+    "count              INT DEFAULT 1"
   ],
 
   "statement_text_simplified": [
