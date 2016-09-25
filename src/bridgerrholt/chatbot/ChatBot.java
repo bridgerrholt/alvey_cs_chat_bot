@@ -40,7 +40,7 @@ public class ChatBot
 	public void run(String databaseFile) throws Exception {
 		try {
 			database = Database.createConnection(databaseFile);
-			database.setAutoCommit(false);
+			//database.setAutoCommit(false);
 
 			setupTables();
 
@@ -117,6 +117,20 @@ public class ChatBot
 		void apply(T t) throws Exception;
 	}
 
+	private class Location
+	{
+		public Location(String tableName, int rowId) {
+			this.tableName = tableName;
+			this.rowId     = rowId;
+		}
+
+		public String getTableName() { return tableName; }
+		public int    getRowId()     { return rowId; }
+
+		private String tableName;
+		private int    rowId;
+	}
+
 
 	private void setupTables() throws Exception {
 		assert(database != null);
@@ -151,7 +165,7 @@ public class ChatBot
 				}
 			}
 
-			database.commit();
+			//database.commit();
 		}
 	}
 
@@ -192,7 +206,7 @@ public class ChatBot
 	}
 
 	private void outputStatement(ResultSet set) throws Exception {
-		position = set.getInt("rowid");
+		setPosition(set.getInt("rowid"));
 
 		ResultSet text = pullRows(statementTables.text, "WHERE rowid=?",
 			statement -> {
@@ -214,15 +228,18 @@ public class ChatBot
 		resultSet.insertRow();*/
 	}
 
+	// If the statement already exist, adds it.
 	private void addStatement(StatementData data) throws Exception {
 		ResultSet results = pullRows(statementTables.textSimplified,
 			"WHERE text=?",
 			statement -> {
-				statement.setString(1, data.getText());
+				statement.setString(1, data.getTextSimplified());
 			});
 
+		int newPosition;
+
 		if (results == null) {
-			fullStatementAdd(data);
+			newPosition = fullStatementAdd(data);
 		}
 		else {
 			results.next();
@@ -236,7 +253,7 @@ public class ChatBot
 				});
 
 			if (results == null) {
-				connectToTextSimplified(data, textSimplifiedId);
+				newPosition = connectToTextSimplified(data, textSimplifiedId);
 			}
 			else {
 				results.next();
@@ -249,7 +266,7 @@ public class ChatBot
 					});
 
 				if (results == null) {
-					connectToData(data, dataId);
+					newPosition = connectToData(data, dataId);
 				}
 				else {
 					results.next();
@@ -261,12 +278,21 @@ public class ChatBot
 						});
 
 					if (results == null) {
-						connectToText(data, textId);
+						newPosition = connectToText(data, textId);
+					}
+					else {
+						results.next();
+						newPosition = results.getInt("rowid");
+						incrementCount(new Location(statementTables.tree, newPosition));
 					}
 				}
 			}
 		}
+
+		setPosition(newPosition);
 	}
+
+
 
 	/// @return null if resultSet was empty.
 	private ResultSet pullRows(String                             tableName,
@@ -287,6 +313,31 @@ public class ChatBot
 			return null;
 	}
 
+	private ResultSet pullRow(Location location) throws Exception {
+		return pullRows(statementTables.tree, "WHERE rowid=?",
+			statement -> {
+				statement.setInt(1, location.rowId);
+			});
+	}
+
+	private void simpleChange(String tableName, String front, String back) throws Exception {
+		Statement statement = database.createStatement();
+		statement.executeUpdate(front + " " + tableName + " " + back);
+	}
+
+	private void generalChange(String                             tableName,
+	                           String                             front,
+	                           String                             back,
+	                           CheckedFunction<PreparedStatement> binding) throws Exception {
+		PreparedStatement statement = database.prepareStatement(
+			front + " " + tableName + " " + back
+		);
+
+		binding.apply(statement);
+
+		statement.executeUpdate();
+	}
+
 	private void insertTo(String                             tableName,
 	                      ArrayList<String>                  columnNames,
 	                      CheckedFunction<PreparedStatement> binding) throws Exception {
@@ -295,15 +346,21 @@ public class ChatBot
 			insertFields.add("?");
 		}
 
-		PreparedStatement statement = database.prepareStatement(
+		/*PreparedStatement statement = database.prepareStatement(
 			"INSERT INTO " + tableName + " " + parenthesize(columnNames) +
 			" VALUES " + parenthesize(insertFields)
 		);
 
 		binding.apply(statement);
 
-		statement.executeUpdate();
+		statement.executeUpdate();*/
+
+		generalChange(tableName, "INSERT INTO",
+			parenthesize(columnNames) + " VALUES " + parenthesize(insertFields),
+			binding);
 	}
+
+
 
 	private String requestUserStatement(String output) {
 		out.println(" ~ " + output);
@@ -316,7 +373,9 @@ public class ChatBot
 		return new Scanner(in).nextLine();
 	}
 
-	private void fullStatementAdd(StatementData data) throws Exception {
+
+	// Returns the "rowid" value of the inserted tree row.
+	private int fullStatementAdd(StatementData data) throws Exception {
 		ArrayList<String> columns = new ArrayList<>();
 		columns.add("text");
 		insertTo(statementTables.textSimplified, columns,
@@ -324,11 +383,12 @@ public class ChatBot
 				statement.setString(1, data.getTextSimplified());
 			});
 
-		connectToTextSimplified(data, lastRowId());
+		return connectToTextSimplified(data, lastRowId());
 	}
 
-	private void connectToTextSimplified(StatementData data,
-	                                     int           textSimplifiedId) throws Exception {
+	// Returns the "rowid" value of the inserted tree row.
+	private int connectToTextSimplified(StatementData data,
+	                                    int           textSimplifiedId) throws Exception {
 		ArrayList<String> columns = new ArrayList<>();
 		columns.add("text_simplified_id");
 		columns.add("type");
@@ -341,11 +401,13 @@ public class ChatBot
 				statement.setBoolean(3, data.hasQuestion());
 			});
 
-		connectToData(data, lastRowId());
+		int position = connectToNewData(data, lastRowId());
+		return position;
 	}
 
-	private void connectToData(StatementData data,
-	                           int           dataId) throws Exception {
+	// Does not increment data's count.
+	private int connectToNewData(StatementData data,
+	                                int           dataId) throws Exception {
 		ArrayList<String> columns = new ArrayList<>();
 		columns.add("data_id");
 		columns.add("text");
@@ -356,11 +418,21 @@ public class ChatBot
 				statement.setString(2, data.getText());
 			});
 
-		connectToText(data, lastRowId());
+		int position = connectToText(data, lastRowId());
+		return position;
 	}
 
-	private void connectToText(StatementData data,
-	                           int           textId) throws Exception {
+	// Returns the "rowid" value of the inserted tree row.
+	private int connectToData(StatementData data,
+	                          int           dataId) throws Exception {
+		int position = connectToNewData(data, dataId);
+		incrementSingleCount(new Location(statementTables.data, dataId));
+		return position;
+	}
+
+	// Returns the "rowid" value of the inserted tree row.
+	private int connectToText(StatementData data,
+	                          int           textId) throws Exception {
 		ArrayList<String> columns = new ArrayList<>();
 		columns.add("list_id");
 		columns.add("text_id");
@@ -371,8 +443,11 @@ public class ChatBot
 				statement.setInt(2, textId);
 			});
 
-		database.commit();
+		//database.commit();
+
+		return lastRowId();
 	}
+
 
 	private String parenthesize(ArrayList<String> items) {
 		String returnStr = "(";
@@ -428,4 +503,71 @@ public class ChatBot
 		}
 	}
 
+	private void setPosition(int value) {
+		position = value;
+	}
+
+
+	// Increments going down the hierarchy.
+	private void incrementCount(Location location) throws Exception {
+		if (location.getTableName().equals(statementTables.tree)) {
+			// Increment tree.
+			incrementSingleCount(location);
+			location = nextLayerFromTree(location.rowId);
+			location = nextLayerFromText(location.rowId);
+			// Increment data.
+			incrementSingleCount(location);
+		}
+
+		else if (location.getTableName().equals(statementTables.text)) {
+			location = nextLayerFromText(location.rowId);
+			// Increment data.
+			incrementSingleCount(location);
+		}
+
+		else if (location.getTableName().equals(statementTables.data)) {
+			// Increment data.
+			incrementSingleCount(location);
+		}
+	}
+
+	// Does not go down the hierarchy, only increments the specific location's count.
+	private void incrementSingleCount(Location location) throws Exception {
+		String tableName = location.getTableName();
+
+		// These are the only tables with "count" columns.
+		assert (tableName.equals(statementTables.tree) ||
+			      tableName.equals(statementTables.data));
+
+		generalChange(tableName, "UPDATE", "SET count = count+1 WHERE rowid = ?",
+			statement -> {
+				statement.setInt(1, location.getRowId());
+			});
+	}
+
+
+	private Location layerToNextLayer(String tableFrom,
+	                                  String tableTo,
+	                                  int originalRowId) throws Exception {
+
+		ResultSet set = pullRow(new Location(tableFrom, originalRowId));
+
+		assert (set != null);
+		set.next();
+
+		return new Location(tableTo, set.getInt("rowid"));
+	}
+
+
+	private Location nextLayerFromTree(int rowId) throws Exception {
+		return layerToNextLayer(statementTables.tree, statementTables.text, rowId);
+	}
+
+	private Location nextLayerFromText(int rowId) throws Exception {
+		return layerToNextLayer(statementTables.text, statementTables.data, rowId);
+	}
+
+	private Location nextLayerFromData(int rowId) throws Exception {
+		return layerToNextLayer(statementTables.data, statementTables.textSimplified, rowId);
+	}
 }
