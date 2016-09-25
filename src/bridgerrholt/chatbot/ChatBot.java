@@ -45,44 +45,31 @@ public class ChatBot
 			setupTables();
 
 			greeting();
+
+			while (true) {
+				if (isBotsTurn) {
+					// If bot has no basic non-question, say it doesn't know what to say.
+					// Get next_list_id set from position, if not empty choose random one,
+					// otherwise choose random statement from statement_data table.
+
+					isBotsTurn = false;
+				}
+
+				else {
+					String input = getInput().trim();
+					// TODO: Somehow embed into addUserStatement().
+					if (input.equals(":quit")) {
+						break;
+					}
+
+					isBotsTurn = true;
+				}
+			}
 		}
 
 		finally {
 			if (database != null) database.close();
 		}
-
-		/*Statement statement = null;
-		PreparedStatement preparedStatement = null;
-
-		try {
-			database.setAutoCommit(false);
-
-			statement = database.createStatement();
-			ResultSet introCountSet = statement.executeQuery("SELECT Count(*) FROM conversation_paths WHERE type=1");
-			ResultSet introSet      = statement.executeQuery("SELECT * FROM conversation_paths WHERE type=1");
-
-			int introCount = 0;
-			while (introCountSet.next()) {
-				introCount = introCountSet.getInt(1);
-			}
-
-			int access = 0;
-			if (introCount == 0) {
-				addRow(introCountSet, "Hey", 1);
-			}
-			else {
-				access = random.nextInt(introCount);
-			}
-
-			introSet.absolute(access);
-			prompt(introSet.getString);
-
-
-		}
-
-		finally {
-			if (database != null) database.close();
-		}*/
 	}
 
 	public void setInputStream(InputStream in) {
@@ -93,23 +80,20 @@ public class ChatBot
 		this.out = new PrintStream(out);
 	}
 
-	public void setLocale(Locale locale) {
-		this.locale = locale;
-	}
-
 
 	// Private
 	private Connection  database = null;
 	private Random      random;
 
-	private Locale      locale   = Locale.getDefault();
 	private InputStream in       = System.in;
 	private PrintStream out      = System.out;
 
-	private static StatementTables statementTables = new StatementTables();
+	private static final StatementTables statementTables = new StatementTables();
 
-	private Integer position = null;
-	private String  botName = "Bot";
+	private Integer       position = null;
+	private String        botName = "Bot";
+	private boolean       isBotsTurn = true;
+	private StatementData currentStatement = null;
 
 
 	@FunctionalInterface
@@ -119,13 +103,13 @@ public class ChatBot
 
 	private class Location
 	{
-		public Location(String tableName, int rowId) {
+		Location(String tableName, int rowId) {
 			this.tableName = tableName;
 			this.rowId     = rowId;
 		}
 
-		public String getTableName() { return tableName; }
-		public int    getRowId()     { return rowId; }
+		String getTableName() { return tableName; }
+		int    getRowId()     { return rowId; }
 
 		private String tableName;
 		private int    rowId;
@@ -177,10 +161,7 @@ public class ChatBot
 				});
 
 			if (greetings == null) {
-				StatementData data = new StatementData(
-					requestUserStatement("Say hello to " + botName), StatementData.Type.GREETING
-				);
-				addStatement(data);
+				addUserStatement("Say hello to " + botName, StatementData.Type.GREETING);
 			}
 			else {
 				CountedSet.GradedSet graded = new CountedSet(greetings).grade();
@@ -197,7 +178,12 @@ public class ChatBot
 
 				// This means the bot already had a greeting.
 				if (i == 0) {
-					addStatement(new StatementData(getInput(), StatementData.Type.GREETING));
+					//addStatement(new StatementData(getInput(), StatementData.Type.GREETING));
+					addUserStatement(StatementData.Type.GREETING);
+					isBotsTurn = true;
+				}
+				else {
+					isBotsTurn = false;
 				}
 
 				break;
@@ -361,16 +347,35 @@ public class ChatBot
 	}
 
 
+	private StatementData getUserStatement(StatementData.Type type) {
+		currentStatement = new StatementData(getInput(), type);
 
-	private String requestUserStatement(String output) {
-		out.println(" ~ " + output);
-
-		return getInput();
+		return currentStatement;
 	}
 
+	private StatementData getUserStatement(String output, StatementData.Type type) {
+		out.println(" ~ " + output);
+
+		return getUserStatement(type);
+	}
+
+	private StatementData addUserStatement(StatementData.Type type) {
+		return getUserStatement(type);
+	}
+
+	private StatementData addUserStatement(String output, StatementData.Type type) {
+		return getUserStatement(output, type);
+	}
+
+
 	private String getInput() {
-		out.print("> ");
-		return new Scanner(in).nextLine();
+		while (true) {
+			out.print("> ");
+			String input = new Scanner(in).nextLine();
+
+			if (!input.trim().isEmpty())
+				return input;
+		}
 	}
 
 
