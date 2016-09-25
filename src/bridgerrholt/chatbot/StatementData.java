@@ -2,10 +2,12 @@ package bridgerrholt.chatbot;
 
 class StatementData
 {
-	enum Type
+	/*enum Type
 	{
 		BASIC(0), ANSWER(1), GREETING(2);
 
+		private static final int min = BASIC.getValue(),
+			                       max = GREETING.getValue();
 		private final int value;
 
 		private Type(int value) {
@@ -15,15 +17,31 @@ class StatementData
 		public int getValue() {
 			return value;
 		}
-	}
+
+		public static Type createFromInt(int value) throws Exception {
+			assert (value >= min && value <= max);
+
+			switch (value) {
+				case 0:
+					return BASIC;
+				case 1:
+					return ANSWER;
+				case 2:
+					return GREETING;
+
+				default:
+					throw new Exception("Invalid StatementData.Type value");
+			}
+		}
+	}*/
 
 	String  getText()           { return text; }
 	String  getTextSimplified() { return textSimplified; }
-	Type    getType()           { return type; }
+	int     getType()           { return type.getValue(); }
 	boolean hasQuestion()       { return hasQuestion; }
 
 
-	StatementData(String text, Type type) {
+	StatementData(String text, StatementType type) {
 		this.text = removeExtraSpaces(text);
 		this.type = type;
 
@@ -34,10 +52,10 @@ class StatementData
 
 
 
-	private String  text;
-	private String  textSimplified;
-	private Type    type;
-	private boolean hasQuestion;
+	private String        text;
+	private String        textSimplified;
+	private StatementType type;
+	private boolean       hasQuestion;
 
 	// Removes from and end spaces as well as double spaces.
 	private String removeExtraSpaces(String text) {

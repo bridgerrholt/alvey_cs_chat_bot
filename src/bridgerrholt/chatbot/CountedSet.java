@@ -16,6 +16,19 @@ class CountedSet
 
 		public GradedSet(ResultSet set) throws Exception {
 			Random random = new Random(System.currentTimeMillis());
+			ArrayList<Integer> ids = new ArrayList<>();
+
+			while (set.next()) {
+				int id    = set.getInt("rowid");
+				int count = set.getInt("count");
+				for (int i = 0; i < count; ++i) {
+					ids.add(id);
+				}
+			}
+
+			bestId = ids.get(random.nextInt(ids.size()));
+
+			/*Random random = new Random(System.currentTimeMillis());
 			ArrayList<AtomicInteger> maxValues = new ArrayList<>();
 			ArrayList<Integer>       ids       = new ArrayList<>();
 
@@ -57,7 +70,7 @@ class CountedSet
 				}
 			}
 
-			bestId = ids.get(bestIndex);
+			bestId = ids.get(bestIndex);*/
 		}
 
 		public boolean hasValues() { return (count > 0); }

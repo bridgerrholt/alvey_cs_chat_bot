@@ -46,21 +46,98 @@ public class ChatBot
 
 			greeting();
 
-			while (true) {
+			while (!toQuit) {
 				if (isBotsTurn) {
 					// If bot has no basic non-question, say it doesn't know what to say.
 					// Get next_list_id set from position, if not empty choose random one,
 					// otherwise choose random statement from statement_data table.
+					ResultSet basicNonQuestions = pullRows(statementTables.data, "WHERE has_question = 0 AND type = ?",
+						statement-> {
+							statement.setInt(1, StatementType.BASIC);
+						});
 
-					isBotsTurn = false;
+					if (basicNonQuestions == null) {
+						processUserInput(
+							botName + " doesn't know what to say, maybe tell them something about yourself?",
+							new StatementType(StatementType.BASIC)
+						);
+					}
+					else {
+						StatementType type = null;
+						if (currentStatement.hasQuestion())
+							type = new StatementType(StatementType.ANSWER);
+						else
+							type = new StatementType(StatementType.BASIC);
+
+						final StatementType typeFinal = type;
+
+						ResultSet nextList = pullRows(statementTables.tree, "WHERE list_id = ?",
+							statement -> {
+								statement.setInt(1, getNextListId());
+							});
+						CountedSet.GradedSet gradedSet = null;
+
+						if (nextList != null) {
+							gradedSet = new CountedSet(nextList).grade();
+						}
+
+						else {
+							int toAskQuestion;
+							if (typeFinal.getValue() != StatementType.ANSWER && random.nextInt(100) > 75)
+								toAskQuestion = 1;
+							else
+								toAskQuestion = 0;
+
+							ResultSet possibleResponses = pullRows(statementTables.data, "WHERE type = ? AND has_question = ?",
+								statement -> {
+									statement.setInt(1, typeFinal.getValue());
+									statement.setInt(2, toAskQuestion);
+								});
+
+							if (possibleResponses != null) {
+								gradedSet = new CountedSet(possibleResponses).grade();
+							}
+							else {
+
+								ResultSet basicResponses = pullRows(statementTables.data, "WHERE type = ?",
+									statement -> {
+										statement.setInt(1, StatementType.BASIC);
+									});
+								gradedSet = new CountedSet(basicResponses).grade();
+							}
+
+						}
+
+						assert gradedSet.hasValues();
+
+						int best = gradedSet.getBestId();
+
+						ResultSet toSay = pullRow(new Location(statementTables.tree, best));
+
+						assert (toSay != null);
+						processBotStatement(toSay);
+
+						isBotsTurn = false;
+					}
+
 				}
 
 				else {
-					String input = getInput().trim();
-					// TODO: Somehow embed into addUserStatement().
-					if (input.equals(":quit")) {
-						break;
+					StatementType type = null;
+
+					if (currentStatement.hasQuestion())
+						type = new StatementType(StatementType.ANSWER);
+					else {
+						if (currentStatement.getType() == StatementType.GREETING && !finishedGreeting) {
+							type = new StatementType(StatementType.GREETING);
+							finishedGreeting = true;
+						}
+						else
+							type = new StatementType(StatementType.BASIC);
 					}
+
+					processUserInput(type);
+					if (toQuit) break;
 
 					isBotsTurn = true;
 				}
@@ -93,7 +170,10 @@ public class ChatBot
 	private Integer       position = null;
 	private String        botName = "Bot";
 	private boolean       isBotsTurn = true;
+	private boolean       toQuit = false;
+	private StatementData lastStatement    = null;
 	private StatementData currentStatement = null;
+	private boolean       finishedGreeting = false;
 
 
 	@FunctionalInterface
@@ -154,14 +234,14 @@ public class ChatBot
 	}
 
 	private void greeting() throws Exception {
-		for (int i = 0; true; ++i) {
+		for (int i = 0; !toQuit; ++i) {
 			ResultSet greetings = pullRows(statementTables.data, "WHERE type=?",
 				statement -> {
 					statement.setInt(1, 2);
 				});
 
 			if (greetings == null) {
-				addUserStatement("Say hello to " + botName, StatementData.Type.GREETING);
+				processUserInput("Say hello to " + botName, new StatementType(StatementType.GREETING));
 			}
 			else {
 				CountedSet.GradedSet graded = new CountedSet(greetings).grade();
@@ -174,17 +254,21 @@ public class ChatBot
 						statement.setInt(1, best);
 					});
 
-				outputStatement(greeting);
+				processBotStatement(greeting);
 
-				// This means the bot already had a greeting.
+				isBotsTurn = false;
+
+				/*// This means the bot already had a greeting.
 				if (i == 0) {
 					//addStatement(new StatementData(getInput(), StatementData.Type.GREETING));
-					addUserStatement(StatementData.Type.GREETING);
+					processUserInput(StatementData.Type.GREETING);
 					isBotsTurn = true;
 				}
 				else {
 					isBotsTurn = false;
-				}
+				}*/
+
+				if (i == 1) finishedGreeting = true;
 
 				break;
 			}
@@ -202,6 +286,33 @@ public class ChatBot
 		assert (text != null);
 
 		out.println(botName + ": " + text.getString("text"));
+	}
+
+	private void processBotStatement(ResultSet set) throws Exception {
+		setPosition(set.getInt("rowid"));
+
+		/*ResultSet text = pullRows(statementTables.text, "WHERE rowid=?",
+			statement -> {
+				statement.setInt(1, set.getInt("text_id"));
+			});*/
+
+		ResultSet textSet = pullRow(new Location(statementTables.text, set.getInt("text_id")));
+
+		assert (textSet != null);
+
+		textSet.next();
+
+		String textStr = textSet.getString("text");
+
+		ResultSet dataSet = pullRow(new Location(statementTables.data, textSet.getInt("data_id")));
+
+		assert (dataSet != null);
+
+		lastStatement = currentStatement;
+		currentStatement = new StatementData(textStr,
+			new StatementType(dataSet.getInt("type")));
+
+		out.println(botName + ": " + textStr);
 	}
 
 	private void addRow(ResultSet resultSet, String textDisplay, int type) throws SQLException {
@@ -234,7 +345,7 @@ public class ChatBot
 				"WHERE text_simplified_id=? AND type=? AND has_question=?",
 				statement -> {
 					statement.setInt(1, textSimplifiedId);
-					statement.setInt(2, data.getType().getValue());
+					statement.setInt(2, data.getType());
 					statement.setBoolean(3, data.hasQuestion());
 				});
 
@@ -300,7 +411,7 @@ public class ChatBot
 	}
 
 	private ResultSet pullRow(Location location) throws Exception {
-		return pullRows(statementTables.tree, "WHERE rowid=?",
+		return pullRows(location.getTableName(), "WHERE rowid=?",
 			statement -> {
 				statement.setInt(1, location.rowId);
 			});
@@ -347,24 +458,49 @@ public class ChatBot
 	}
 
 
-	private StatementData getUserStatement(StatementData.Type type) {
+	private StatementData getUserStatement(StatementType type) {
 		currentStatement = new StatementData(getInput(), type);
 
 		return currentStatement;
 	}
 
-	private StatementData getUserStatement(String output, StatementData.Type type) {
+	private StatementData getUserStatement(String output, StatementType type) {
 		out.println(" ~ " + output);
 
 		return getUserStatement(type);
 	}
 
-	private StatementData addUserStatement(StatementData.Type type) {
-		return getUserStatement(type);
+	private StatementData addUserStatement(StatementType type) throws Exception {
+		addStatement(getUserStatement(type));
+		return currentStatement;
 	}
 
-	private StatementData addUserStatement(String output, StatementData.Type type) {
-		return getUserStatement(output, type);
+	private StatementData addUserStatement(String        output,
+	                                       StatementType type) throws Exception {
+		addStatement(getUserStatement(output, type));
+		return currentStatement;
+	}
+
+	/// @return true if the program should continue.
+	private boolean processUserInput(StatementType type) throws Exception {
+		String input = getInput().trim();
+		if (input.toLowerCase().equals(":quit")) {
+			toQuit = true;
+			return false;
+		}
+
+		else {
+			lastStatement = currentStatement;
+			currentStatement = new StatementData(input, type);
+			addStatement(currentStatement);
+			return true;
+		}
+	}
+
+	private boolean processUserInput(String output, StatementType type) throws Exception {
+		out.println(" ~ " + output);
+
+		return processUserInput(type);
 	}
 
 
@@ -377,6 +513,7 @@ public class ChatBot
 				return input;
 		}
 	}
+
 
 
 	// Returns the "rowid" value of the inserted tree row.
@@ -402,7 +539,7 @@ public class ChatBot
 		insertTo(statementTables.data, columns,
 			statement -> {
 				statement.setInt(1, textSimplifiedId);
-				statement.setInt(2, data.getType().getValue());
+				statement.setInt(2, data.getType());
 				statement.setBoolean(3, data.hasQuestion());
 			});
 
@@ -442,16 +579,20 @@ public class ChatBot
 		columns.add("list_id");
 		columns.add("text_id");
 
+		final int listId = pointNextListId();
+
 		insertTo(statementTables.tree, columns,
 			statement -> {
-				statement.setInt(1, getNextListId());
+				statement.setInt(1, listId);
 				statement.setInt(2, textId);
 			});
+
 
 		//database.commit();
 
 		return lastRowId();
 	}
+
 
 
 	private String parenthesize(ArrayList<String> items) {
@@ -508,9 +649,22 @@ public class ChatBot
 		}
 	}
 
+	private int pointNextListId() throws Exception {
+		final int nextListId = getNextListId();
+		if (nextListId != 1) {
+			generalChange(statementTables.tree, "UPDATE", "SET next_list_id = ? WHERE rowid = ?",
+				statement -> {
+					statement.setInt(1, nextListId);
+					statement.setInt(2, position);
+				});
+		}
+		return nextListId;
+	}
+
 	private void setPosition(int value) {
 		position = value;
 	}
+
 
 
 	// Increments going down the hierarchy.
@@ -562,6 +716,7 @@ public class ChatBot
 
 		return new Location(tableTo, set.getInt("rowid"));
 	}
+
 
 
 	private Location nextLayerFromTree(int rowId) throws Exception {
