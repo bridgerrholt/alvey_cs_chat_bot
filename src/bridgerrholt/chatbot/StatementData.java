@@ -2,39 +2,6 @@ package bridgerrholt.chatbot;
 
 class StatementData
 {
-	/*enum Type
-	{
-		BASIC(0), ANSWER(1), GREETING(2);
-
-		private static final int min = BASIC.getValue(),
-			                       max = GREETING.getValue();
-		private final int value;
-
-		private Type(int value) {
-			this.value = value;
-		}
-
-		public int getValue() {
-			return value;
-		}
-
-		public static Type createFromInt(int value) throws Exception {
-			assert (value >= min && value <= max);
-
-			switch (value) {
-				case 0:
-					return BASIC;
-				case 1:
-					return ANSWER;
-				case 2:
-					return GREETING;
-
-				default:
-					throw new Exception("Invalid StatementData.Type value");
-			}
-		}
-	}*/
-
 	String  getText()           { return text; }
 	String  getTextSimplified() { return textSimplified; }
 	int     getType()           { return type.getValue(); }

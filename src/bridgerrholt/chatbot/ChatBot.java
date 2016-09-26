@@ -275,19 +275,6 @@ public class ChatBot
 		}
 	}
 
-	private void outputStatement(ResultSet set) throws Exception {
-		setPosition(set.getInt("rowid"));
-
-		ResultSet text = pullRows(statementTables.text, "WHERE rowid=?",
-			statement -> {
-				statement.setInt(1, set.getInt("text_id"));
-			});
-
-		assert (text != null);
-
-		out.println(botName + ": " + text.getString("text"));
-	}
-
 	private void processBotStatement(ResultSet set) throws Exception {
 		setPosition(set.getInt("rowid"));
 
@@ -313,16 +300,6 @@ public class ChatBot
 			new StatementType(dataSet.getInt("type")));
 
 		out.println(botName + ": " + textStr);
-	}
-
-	private void addRow(ResultSet resultSet, String textDisplay, int type) throws SQLException {
-		/*resultSet.moveToInsertRow();
-		resultSet.updateInt("list_id", 0);
-		resultSet.updateInt("next_list_id", 0);
-		resultSet.updateInt("type", type);
-		resultSet.updateString("text_display", textDisplay);
-		resultSet.updateString("text_simple", simplifyText(textDisplay));
-		resultSet.insertRow();*/
 	}
 
 	// If the statement already exist, adds it.
@@ -455,30 +432,6 @@ public class ChatBot
 		generalChange(tableName, "INSERT INTO",
 			parenthesize(columnNames) + " VALUES " + parenthesize(insertFields),
 			binding);
-	}
-
-
-	private StatementData getUserStatement(StatementType type) {
-		currentStatement = new StatementData(getInput(), type);
-
-		return currentStatement;
-	}
-
-	private StatementData getUserStatement(String output, StatementType type) {
-		out.println(" ~ " + output);
-
-		return getUserStatement(type);
-	}
-
-	private StatementData addUserStatement(StatementType type) throws Exception {
-		addStatement(getUserStatement(type));
-		return currentStatement;
-	}
-
-	private StatementData addUserStatement(String        output,
-	                                       StatementType type) throws Exception {
-		addStatement(getUserStatement(output, type));
-		return currentStatement;
 	}
 
 	/// @return true if the program should continue.
