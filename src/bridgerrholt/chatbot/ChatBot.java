@@ -249,12 +249,25 @@ public class ChatBot
 
 				int best = graded.getBestId();
 
-				ResultSet greeting = pullRows(statementTables.tree, "WHERE rowid=?",
+				ResultSet text = pullRows(statementTables.text, "WHERE data_id=?",
 					statement -> {
 						statement.setInt(1, best);
 					});
 
-				processBotStatement(greeting);
+				assert (text != null);
+
+				ResultSet winner = pullRows(statementTables.tree, "WHERE text_id=?",
+					statement -> {
+						statement.setInt(1, text.getInt(1));
+					});
+				assert (winner != null);
+
+				/*ResultSet greeting = pullRows(statementTables.tree, "WHERE rowid=?",
+					statement -> {
+						statement.setInt(1, winner.getInt(2));
+					});*/
+
+				processBotStatement(winner);
 
 				isBotsTurn = false;
 
