@@ -75,7 +75,7 @@ public class ChatBot
 							statement -> {
 								statement.setInt(1, getNextListId());
 							});
-						CountedSet.GradedSet gradedSet = null;
+						GradedSet gradedSet = null;
 
 						if (nextList != null) {
 							gradedSet = new CountedSet(nextList).grade();
@@ -234,58 +234,51 @@ public class ChatBot
 	}
 
 	private void greeting() throws Exception {
-		for (int i = 0; !toQuit; ++i) {
-			ResultSet greetings = pullRows(statementTables.data, "WHERE type=?",
+		ResultSet greetings = null;
+		while (greetings == null) {
+			// Pull all the greetings.
+			greetings = pullRows(statementTables.data, "WHERE type=?",
 				statement -> {
 					statement.setInt(1, 2);
 				});
 
+			// Have the user give a greeting if the bot has none.
 			if (greetings == null) {
 				processUserInput("Say hello to " + botName, new StatementType(StatementType.GREETING));
-			}
-			else {
-				CountedSet.GradedSet graded = new CountedSet(greetings).grade();
-				assert graded.hasValues();
-
-				int best = graded.getBestId();
-
-				ResultSet text = pullRows(statementTables.text, "WHERE data_id=?",
-					statement -> {
-						statement.setInt(1, best);
-					});
-
-				assert (text != null);
-
-				ResultSet winner = pullRows(statementTables.tree, "WHERE text_id=?",
-					statement -> {
-						statement.setInt(1, text.getInt(1));
-					});
-				assert (winner != null);
-
-				/*ResultSet greeting = pullRows(statementTables.tree, "WHERE rowid=?",
-					statement -> {
-						statement.setInt(1, winner.getInt(2));
-					});*/
-
-				processBotStatement(winner);
-
-				isBotsTurn = false;
-
-				/*// This means the bot already had a greeting.
-				if (i == 0) {
-					//addStatement(new StatementData(getInput(), StatementData.Type.GREETING));
-					processUserInput(StatementData.Type.GREETING);
-					isBotsTurn = true;
-				}
-				else {
-					isBotsTurn = false;
-				}*/
-
-				if (i == 1) finishedGreeting = true;
-
-				break;
+				finishedGreeting = true;
 			}
 		}
+
+		// Pick a random greeting to display.
+		final int greetingId = CountedSet.randomlyChoose(greetings);
+		ResultSet text = pullRows(statementTables.text, "WHERE data_id=?",
+			statement -> statement.setInt(1, greetingId)
+		);
+		assert (text != null);
+
+		ResultSet winner = pullRows(statementTables.tree, "WHERE text_id=?",
+			statement -> statement.setInt(1, text.getInt(1))
+		);
+		assert (winner != null);
+
+		/*ResultSet greeting = pullRows(statementTables.tree, "WHERE rowid=?",
+			statement -> {
+				statement.setInt(1, winner.getInt(2));
+			});*/
+
+		processBotStatement(winner);
+
+		isBotsTurn = false;
+
+		/*// This means the bot already had a greeting.
+		if (i == 0) {
+			//addStatement(new StatementData(getInput(), StatementData.Type.GREETING));
+			processUserInput(StatementData.Type.GREETING);
+			isBotsTurn = true;
+		}
+		else {
+			isBotsTurn = false;
+		}*/
 	}
 
 	private void processBotStatement(ResultSet set) throws Exception {

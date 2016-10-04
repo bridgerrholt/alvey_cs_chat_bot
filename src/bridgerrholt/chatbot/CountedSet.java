@@ -5,28 +5,24 @@ import java.util.ArrayList;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
-class CountedSet
+class GradedSet
 {
-	private ResultSet resultSet;
+	private int count;
+	private int bestId = 0;
 
-	public class GradedSet
-	{
-		private int count;
-		private int bestId = 0;
+	GradedSet(ResultSet set) throws Exception {
+		Random random = new Random(System.currentTimeMillis());
+		ArrayList<Integer> ids = new ArrayList<>();
 
-		public GradedSet(ResultSet set) throws Exception {
-			Random random = new Random(System.currentTimeMillis());
-			ArrayList<Integer> ids = new ArrayList<>();
-
-			while (set.next()) {
-				int id    = set.getInt("rowid");
-				int count = set.getInt("count");
-				for (int i = 0; i < count; ++i) {
-					ids.add(id);
-				}
+		while (set.next()) {
+			int id    = set.getInt("rowid");
+			int count = set.getInt("count");
+			for (int i = 0; i < count; ++i) {
+				ids.add(id);
 			}
+		}
 
-			bestId = ids.get(random.nextInt(ids.size()));
+		bestId = ids.get(random.nextInt(ids.size()));
 
 			/*Random random = new Random(System.currentTimeMillis());
 			ArrayList<AtomicInteger> maxValues = new ArrayList<>();
@@ -71,18 +67,28 @@ class CountedSet
 			}
 
 			bestId = ids.get(bestIndex);*/
-		}
-
-		public boolean hasValues() { return (count > 0); }
-		public int     getBestId() { return bestId; }
 	}
 
-	public CountedSet(ResultSet resultSet) {
+	boolean hasValues() { return (count > 0); }
+	int     getBestId() { return bestId; }
+}
+
+class CountedSet
+{
+	private ResultSet resultSet;
+
+	CountedSet(ResultSet resultSet) {
 		this.resultSet = resultSet;
 	}
 
-	public GradedSet grade() throws Exception {
+	GradedSet grade() throws Exception {
 		return new GradedSet(resultSet);
+	}
+
+	static int randomlyChoose(ResultSet resultSet) throws Exception {
+		GradedSet gradedSet =  new GradedSet(resultSet);
+		assert gradedSet.hasValues();
+		return gradedSet.getBestId();
 	}
 
 
